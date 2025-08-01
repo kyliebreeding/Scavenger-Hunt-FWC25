@@ -5,53 +5,101 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>Scavenger Hunt – Code Entry</title>
   <style>
-/* Responsive sizing for code boxes */
-:root{
-  --box-size: clamp(2.0rem, 9.2vw, 2.6rem);   /* width/height scales with screen */
-  --box-font: clamp(16px, 4.2vw, 20px);       /* keep >=16px to avoid iOS zoom */
-  --gap:      clamp(0.20rem, 1.5vw, 0.45rem); /* spacing between boxes */
-  --ring:     clamp(2px, 0.6vw, 3px);         /* rainbow ring thickness */
-  --radius:   10px;
-}
+    /* ---------- Vars ---------- */
+    :root {
+      --ring: 3px;               /* thickness of animated rainbow border */
+      --radius: 10px;            /* corner radius of inputs */
+      /* Responsive sizing so 7 boxes fit on phones */
+      --box-size: clamp(2.0rem, 9.2vw, 2.6rem);
+      --box-font: clamp(16px, 4.2vw, 20px);   /* >=16px prevents iOS zoom */
+      --gap: clamp(0.20rem, 1.5vw, 0.45rem);
+    }
 
-#inputs { 
-  display:flex; 
-  gap: var(--gap);
-  margin-bottom: 1rem; 
-}
+    /* ---------- Page layout ---------- */
+    html, body { height:100%; margin:0; }
+    body {
+      display:flex; align-items:center; justify-content:center; flex-direction:column;
+      font-family: Arial, sans-serif; background:#eef4ff; padding:1.5rem; text-align:center;
+    }
+    h1 { margin:.2rem 0 1rem; font-size:1.6rem; color:#2b3a67; }
 
-/* The input box itself */
-.codebox{
-  width: var(--box-size);
-  height: calc(var(--box-size) + 0.3rem);
-  font-size: var(--box-font);
-  border-radius: var(--radius);
-}
+    /* ---------- Inputs row ---------- */
+    #inputs{
+      display:flex; gap:var(--gap); margin-bottom:1rem; flex-wrap:nowrap;
+    }
 
-/* Make the wrapper ring track the box size too */
-.ring{ border-radius: calc(var(--radius) + var(--ring)); }
-.ring::after{
-  inset: calc(-1 * var(--ring));
-  border-radius: calc(var(--radius) + var(--ring));
-  padding: var(--ring);
-}
+    /* Wrapper draws the animated rainbow ring; input sits on top */
+    .ring { position: relative; display:inline-block; border-radius: calc(var(--radius) + var(--ring)); }
 
-/* Extra squeeze for very narrow phones */
-@media (max-width: 360px){
-  :root{
-    --box-size: clamp(1.8rem, 9vw, 2.2rem);
-    --box-font: clamp(16px, 3.8vw, 18px);
-    --gap:      clamp(0.15rem, 1.2vw, 0.35rem);
-  }
-}
+    /* Stationary input box */
+    .codebox{
+      width: var(--box-size);
+      height: calc(var(--box-size) + 0.3rem);
+      font-size: var(--box-font);
+      text-align:center;
+      border:2px solid #b0c4ff;
+      border-radius: var(--radius);
+      background:#fff; outline:none; position:relative; z-index:1;
+      transition:border-color .18s ease, box-shadow .18s ease;
+    }
 
-/* Safety net for ultra-narrow screens (keeps one line) */
-@media (max-width: 320px){
-  #inputs{
-    transform: scale(0.92);
-    transform-origin: top center;
-  }
-}
+    /* Rainbow border (stationary shape, colors animate only) */
+    .ring::after{
+      content:""; position:absolute; inset: calc(-1 * var(--ring));
+      border-radius: calc(var(--radius) + var(--ring));
+      padding: var(--ring); z-index:0; opacity:0; transition: opacity .12s ease;
+      --angle: 0deg;
+      background: conic-gradient(from var(--angle),
+        red, orange, yellow, green, blue, indigo, violet, red);
+      /* Hollow center so only the ring shows */
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+              mask-composite: exclude;
+    }
+    .ring.spinning::after { opacity:1; animation: spin 1.2s linear infinite; }
+
+    /* Animate the custom property (no element rotation) */
+    @property --angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+    @keyframes spin { to { --angle: 360deg; } }
+
+    /* Correctness */
+    .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
+    .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
+
+    #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
+
+    /* ---------- Reveal (answer) section ---------- */
+    #reveal { display:none; width:min(700px, 92vw); margin-top:1rem; }
+    .reveal-header { font-weight:600; margin-bottom:.6rem; color:#2b3a67; font-size:1.05rem; }
+
+    .image-wrap {
+      position:relative; width:100%;
+      border:2px solid #b0c4ff; border-radius:12px; overflow:hidden; background:#fff;
+    }
+    #photo { width:100%; height:auto; display:block; }
+
+    /* Scratch overlay */
+    #scratch {
+      position:absolute; inset:0; touch-action:none; cursor: crosshair;
+    }
+
+    /* Extra squeeze for very narrow phones */
+    @media (max-width: 360px){
+      :root{
+        --box-size: clamp(1.8rem, 9vw, 2.2rem);
+        --box-font: clamp(16px, 3.8vw, 18px);
+        --gap:      clamp(0.15rem, 1.2vw, 0.35rem);
+      }
+    }
+    /* Safety net for ultra-narrow screens */
+    @media (max-width: 320px){
+      #inputs{ transform: scale(0.92); transform-origin: top center; }
+    }
   </style>
 </head>
 <body>
@@ -76,40 +124,38 @@
       <img id="photo" src="bench.jpg" alt="Clue image" />
       <canvas id="scratch"></canvas>
     </div>
-    <div class="reveal-controls">
-      <span class="btn" id="revealAll">Reveal all</span>
-    </div>
   </section>
 
   <!-- Theme music -->
   <audio id="theme" src="mission-impossible.mp3" preload="auto"></audio>
 
   <script>
+    /* ---------- Config ---------- */
     const ANSWER = "8314335";
-    const CLEAR_THRESHOLD = 0.5; // >50% must be cleared
+    const CLEAR_THRESHOLD = 0.5; // >50% must be erased to fully reveal
 
+    /* ---------- Elements ---------- */
     const rings  = Array.from(document.querySelectorAll('.ring'));
     const boxes  = rings.map(r => r.querySelector('.codebox'));
     const error  = document.getElementById('error');
     const reveal = document.getElementById('reveal');
     const photo  = document.getElementById('photo');
     const canvas = document.getElementById('scratch');
-    const revealAllBtn = document.getElementById('revealAll');
     const theme  = document.getElementById('theme');
 
-    // ----- THEME: start on first user interaction (safe autoplay) -----
+    /* ---------- Audio: start on first interaction ---------- */
     let audioStarted = false;
     function startAudioOnce() {
       if (audioStarted) return;
       audioStarted = true;
       theme.volume = 1.0;
-      theme.play().catch(()=>{});
+      theme.play().catch(() => {});
     }
     ['click','keydown','touchstart','focus'].forEach(evt => {
       window.addEventListener(evt, startAudioOnce, { once:false, passive:true });
     });
 
-    // ----- CODE INPUTS -----
+    /* ---------- Code inputs ---------- */
     boxes[0].focus();
     boxes.forEach((box, idx) => {
       const ring = rings[idx];
@@ -171,10 +217,9 @@
       }
     }
 
-    // ----- SCRATCH-OFF OVERLAY -----
-    let ctx, isDrawing = false, lastX = 0, lastY = 0, clearedRatio = 0;
+    /* ---------- Scratch/erase overlay ---------- */
+    let ctx, isDrawing = false, lastX = 0, lastY = 0;
     function setupScratch(){
-      // Size canvas to match displayed image size (and handle HiDPI)
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       const rect = photo.getBoundingClientRect();
       canvas.style.width = rect.width + 'px';
@@ -185,17 +230,14 @@
       ctx = canvas.getContext('2d');
       ctx.scale(dpr, dpr);
 
-      // Draw an OPAQUE haze (no transparency)
-      ctx.fillStyle = '#6e788f'; // solid slate color
+      // Opaque haze (no transparency), with heading rendered on top
+      ctx.fillStyle = '#6e788f';
       ctx.fillRect(0,0,rect.width,rect.height);
-
-      // Instruction text on the overlay
       ctx.font = '600 18px Arial';
       ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.fillText('Swipe/erase to reveal your next clue', rect.width/2, 32);
 
-      // Events
       canvas.addEventListener('pointerdown', onDown, { passive:true });
       canvas.addEventListener('pointermove', onMove, { passive:true });
       window.addEventListener('pointerup', onUp, { passive:true });
@@ -216,7 +258,6 @@
       eraseDot(pos.x, pos.y);
       estimateCleared();
     }
-
     function onMove(e){
       if (!isDrawing) return;
       const pos = getPos(e);
@@ -224,7 +265,6 @@
       lastX = pos.x; lastY = pos.y;
       estimateCleared();
     }
-
     function onUp(){ isDrawing = false; }
 
     function drawLine(x1, y1, x2, y2){
@@ -237,7 +277,6 @@
         eraseDot(x,y);
       }
     }
-
     function getPos(e){
       const rect = canvas.getBoundingClientRect();
       const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
@@ -249,19 +288,16 @@
       // Sample a subset of pixels to estimate cleared area (alpha==0 => cleared)
       const w = canvas.width, h = canvas.height;
       const sampleW = Math.min(w, 1024), sampleH = Math.min(h, 1024);
-      const imgData = ctx.getImageData(0, 0, sampleW, sampleH).data;
+      const data = ctx.getImageData(0, 0, sampleW, sampleH).data;
 
       let clear = 0, total = 0;
-      const step = 8; // sampling step (bigger = faster, rougher)
-      for (let y = 3; y < sampleH*4; y += 4*step) {
-        for (let x = 3; x < sampleW*4; x += 4*step) {
-          total++;
-          if (imgData[y*sampleW*4 + x] === 0) clear++; // alpha channel
-        }
+      const step = 8; // sampling step
+      for (let i = 3; i < data.length; i += 4*step) {
+        total++;
+        if (data[i] === 0) clear++; // alpha channel
       }
-      clearedRatio = clear / total;
-
-      if (clearedRatio > CLEAR_THRESHOLD) fadeOutScratch();
+      const ratio = clear / total;
+      if (ratio > CLEAR_THRESHOLD) fadeOutScratch();
     }
 
     function fadeOutScratch(){
@@ -269,9 +305,6 @@
       canvas.style.opacity = '0';
       setTimeout(()=>{ canvas.style.display = 'none'; }, 400);
     }
-
-    // Optional helper (kept but hidden). Remove if you don’t want a bypass.
-    revealAllBtn?.addEventListener('click', fadeOutScratch);
   </script>
 </body>
 </html>
