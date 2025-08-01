@@ -8,7 +8,7 @@
     :root {
       --ring: 3px;
       --radius: 10px;
-      /* Smaller boxes so 7 fit comfortably */
+      /* Small enough to fit 7 boxes on phones */
       --box-size: clamp(1.8rem, 7.4vw, 2.3rem);
       --box-font: clamp(16px, 3.8vw, 18px);  /* >=16px avoids iOS zoom */
       --gap:      clamp(0.15rem, 1.2vw, 0.35rem);
@@ -23,8 +23,10 @@
 
     #inputs{ display:flex; gap:var(--gap); margin-bottom:1rem; flex-wrap:nowrap; }
 
+    /* Wrapper draws the animated rainbow ring; input sits on top */
     .ring { position: relative; display:inline-block; border-radius: calc(var(--radius) + var(--ring)); }
 
+    /* Stationary input box */
     .codebox{
       width: var(--box-size);
       height: calc(var(--box-size) + 0.2rem);
@@ -35,6 +37,7 @@
       transition:border-color .18s ease, box-shadow .18s ease;
     }
 
+    /* Rainbow border (stationary shape, colors animate only) */
     .ring::after{
       content:""; position:absolute; inset: calc(-1 * var(--ring));
       border-radius: calc(var(--radius) + var(--ring));
@@ -42,6 +45,7 @@
       --angle: 0deg;
       background: conic-gradient(from var(--angle),
         red, orange, yellow, green, blue, indigo, violet, red);
+      /* Hollow center so only the ring shows */
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -53,25 +57,26 @@
     }
     .ring.spinning::after { opacity:1; animation: spin 1.2s linear infinite; }
 
+    /* Animate custom property (no element rotation) */
     @property --angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
     @keyframes spin { to { --angle: 360deg; } }
 
-    .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
-    .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
-
     #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
 
-    /* Reveal section (no header text now) */
+    /* Reveal section */
     #reveal { display:none; width:min(700px, 92vw); margin-top:0.5rem; }
+    .reveal-note { font-weight:600; margin:.5rem 0; color:#2b3a67; position:relative; z-index:2; }
     .image-wrap { position:relative; width:100%; border:2px solid #b0c4ff; border-radius:12px; overflow:hidden; background:#fff; }
     #photo { width:100%; height:auto; display:block; }
     #scratch { position:absolute; inset:0; touch-action:none; cursor: crosshair; }
 
-    /* Extra squeeze for ultra-narrow screens */
+    /* Ultra-narrow screens */
     @media (max-width: 320px){
       #inputs{ transform: scale(0.92); transform-origin: top center; }
     }
   </style>
+  <!-- Confetti library -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
 </head>
 <body>
   <h1 id="pageTitle">Enter the 7-Digit Code</h1>
@@ -87,23 +92,24 @@
   </div>
 
   <div id="error">Wrong code, try again!</div>
-  
+
   <section id="reveal">
-    <p style="font-weight:600; margin-bottom:.5rem; color:#2b3a67;">
-      Swipe/erase to reveal
-    </p>
+    <p class="reveal-note">Swipe/erase to reveal</p>
     <div class="image-wrap">
       <img id="photo" src="bench.jpg" alt="Clue image" />
       <canvas id="scratch"></canvas>
     </div>
   </section>
 
+  <!-- Theme music -->
   <audio id="theme" src="mission-impossible.mp3" preload="auto"></audio>
 
   <script>
+    /* ---------- Config ---------- */
     const ANSWER = "8314335";
     const CLEAR_THRESHOLD = 0.85; // require 85% erased
 
+    /* ---------- Elements ---------- */
     const rings  = Array.from(document.querySelectorAll('.ring'));
     const boxes  = rings.map(r => r.querySelector('.codebox'));
     const error  = document.getElementById('error');
@@ -113,37 +119,33 @@
     const title  = document.getElementById('pageTitle');
     const theme  = document.getElementById('theme');
 
-    // Audio on first interaction
+    /* ---------- Audio: start on first interaction ---------- */
     let audioStarted = false;
     function startAudioOnce() {
       if (audioStarted) return;
       audioStarted = true;
       theme.volume = 1.0;
-      theme.play().catch(()=>{});
+      theme.play().catch(() => {});
     }
     ['click','keydown','touchstart','focus'].forEach(evt => {
       window.addEventListener(evt, startAudioOnce, { once:false, passive:true });
     });
 
-    // Inputs
+    /* ---------- Code inputs ---------- */
     boxes[0].focus();
     boxes.forEach((box, idx) => {
       const ring = rings[idx];
 
+      // Keep rainbow spinning while focused
       box.addEventListener('focus', () => ring.classList.add('spinning'));
       box.addEventListener('blur',  () => ring.classList.remove('spinning'));
 
       box.addEventListener('input', () => {
         startAudioOnce();
+        // accept only one digit
         box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
-        ring.classList.remove('spinning');
-        box.classList.remove('correct','incorrect');
-
-        if (box.value) {
-          (box.value === ANSWER[idx]) ? box.classList.add('correct')
-                                      : box.classList.add('incorrect');
-          if (idx < boxes.length - 1) boxes[idx + 1].focus();
-        }
+        // No correct/incorrect color — just move forward
+        if (box.value && idx < boxes.length - 1) boxes[idx + 1].focus();
         checkAll();
       });
 
@@ -151,17 +153,13 @@
         if (e.key === 'Backspace' && !box.value && idx > 0) boxes[idx - 1].focus();
       });
 
+      // paste convenience
       box.addEventListener('paste', (e) => {
         const t = (e.clipboardData || window.clipboardData).getData('text') || '';
         if (!t) return;
         e.preventDefault();
         const digits = t.replace(/\D/g,'').slice(0, boxes.length).split('');
-        digits.forEach((d, i) => {
-          boxes[i].value = d;
-          boxes[i].classList.toggle('correct',  d === ANSWER[i]);
-          boxes[i].classList.toggle('incorrect', d !== ANSWER[i]);
-          rings[i].classList.remove('spinning');
-        });
+        digits.forEach((d, i) => { boxes[i].value = d; });
         if (digits.length < boxes.length) boxes[digits.length].focus();
         checkAll();
       });
@@ -173,25 +171,36 @@
 
       if (attempt.length === ANSWER.length) {
         if (attempt === ANSWER) {
-          // Hide inputs AND the title text
+          // Hide inputs and title, show reveal
           document.getElementById('inputs').style.display = 'none';
           if (title) title.style.display = 'none';
-
-          // Show reveal
           reveal.style.display = 'block';
+          // Set up overlay and celebrate
           requestAnimationFrame(setupScratch);
+          celebrate(); // confetti!
         } else {
           error.style.display = 'block';
-          boxes.forEach((b,i)=>{
-            if ((b.value || '') !== ANSWER[i]) {
-              b.classList.remove('correct'); b.classList.add('incorrect');
-            }
-          });
+          // Clear inputs if you want to slow brute force:
+          // boxes.forEach(b => b.value = '');
+          // boxes[0].focus();
         }
       }
     }
 
-    // Scratch overlay (opaque; no overlay text now)
+    /* ---------- Confetti on success ---------- */
+    function celebrate(){
+      const duration = 2500;
+      const end = Date.now() + duration;
+      (function frame(){
+        confetti({ particleCount: 6, angle: 60, spread: 55, origin: { x: 0 } });
+        confetti({ particleCount: 6, angle: 120, spread: 55, origin: { x: 1 } });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      })();
+      // One big burst center
+      confetti({ particleCount: 150, spread: 70, startVelocity: 45, origin: { x: 0.5, y: 0.4 } });
+    }
+
+    /* ---------- Scratch/erase overlay ---------- */
     let ctx, isDrawing = false, lastX = 0, lastY = 0;
     function setupScratch(){
       const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -220,7 +229,6 @@
       ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
     }
-
     function onDown(e){
       isDrawing = true;
       const pos = getPos(e);
