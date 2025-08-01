@@ -5,42 +5,72 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>Scavenger Hunt – Code Entry</title>
   <style>
-    :root { --gap: .4rem; }
+    :root { --ring: 3px; --radius: 10px; }
 
     html, body { height:100%; margin:0; }
     body {
       display:flex; align-items:center; justify-content:center; flex-direction:column;
-      font-family: Arial, sans-serif; background:#eef4ff; padding:1.5rem;
-      text-align:center;
+      font-family: Arial, sans-serif; background:#eef4ff; padding:1.5rem; text-align:center;
     }
 
     h1 { margin:.2rem 0 1rem; font-size:1.6rem; }
 
-    #inputs { display:flex; gap:var(--gap); margin-bottom:1rem; }
+    #inputs { display:flex; gap:.45rem; margin-bottom:1rem; }
+
+    /* wrapper that carries the spinning rainbow ring */
+    .ring {
+      position: relative;
+      display: inline-block;
+      border-radius: var(--radius);
+    }
+
+    /* the input itself (stays stationary) */
     .codebox {
       width:2.6rem; height:2.9rem; font-size:20px; text-align:center;
-      border:2px solid #b0c4ff; border-radius:10px; background:#fff;
-      outline:none;
+      border:2px solid #b0c4ff; border-radius: var(--radius);
+      background:#fff; outline:none; position:relative; z-index:1;
       transition:border-color .18s ease, box-shadow .18s ease;
     }
 
-    /* Focused: animated rainbow ring */
-    .codebox:focus {
-      border-color: transparent;
-      background:
-        linear-gradient(#fff, #fff) padding-box,
-        conic-gradient(from 0deg, red, orange, yellow, green, blue, indigo, violet, red) border-box;
+    /* spinning rainbow border drawn by a pseudo-element around the input */
+    .ring::after{
+      content:"";
+      position:absolute;
+      inset: calc(-1 * var(--ring));
+      border-radius: calc(var(--radius) + var(--ring));
+      background: conic-gradient(
+        red, orange, yellow, green, blue, indigo, violet, red
+      );
+      /* create a hollow ring (only the border shows) */
+      padding: var(--ring);
+      /* mask trick to punch the center out */
+      -webkit-mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask:
+        linear-gradient(#000 0 0) content-box,
+        linear-gradient(#000 0 0);
+              mask-composite: exclude;
+
+      z-index:0;
+      opacity:0;               /* hidden by default */
+      transform: rotate(0deg);
+      transition: opacity .12s ease;
+    }
+
+    /* when focused, show and spin the ring (input itself does NOT rotate) */
+    .ring.spinning::after{
+      opacity:1;
       animation: spin 1.2s linear infinite;
-      box-shadow: 0 0 0 3px rgba(125,156,255,.18);
     }
     @keyframes spin { to { transform: rotate(1turn); } }
 
-    /* After typing, we set these classes in JS */
-    .correct  { border:2px solid #28a745 !important; background:#fff !important; animation:none !important; }
-    .incorrect{ border:2px solid #d9534f !important; background:#fff !important; animation:none !important; }
+    /* correctness colors override the normal border and stop the ring */
+    .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
+    .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
 
     #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
-
     #win   { display:none; color:#28a745; font-size:1.3rem; margin-top:.8rem; }
     #photo { display:none; max-width:min(700px, 92vw); width:100%; height:auto;
              margin-top:1rem; border:2px solid #b0c4ff; border-radius:12px; }
@@ -50,13 +80,13 @@
   <h1>Enter the 7-Digit Code</h1>
 
   <div id="inputs" aria-label="7 digit code input">
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
-    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
+    <span class="ring"><input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" /></span>
   </div>
 
   <div id="error">Wrong code, try again!</div>
@@ -65,25 +95,29 @@
 
   <script>
     const ANSWER = "8314335";
-    const boxes  = Array.from(document.querySelectorAll('.codebox'));
+    const rings  = Array.from(document.querySelectorAll('.ring'));
+    const boxes  = rings.map(r => r.querySelector('.codebox'));
     const error  = document.getElementById('error');
     const win    = document.getElementById('win');
     const photo  = document.getElementById('photo');
 
-    // focus first box on load
     boxes[0].focus();
 
     boxes.forEach((box, idx) => {
+      const ring = rings[idx];
+
+      // show spinner on focus, hide on blur
+      box.addEventListener('focus', () => ring.classList.add('spinning'));
+      box.addEventListener('blur',  () => ring.classList.remove('spinning'));
+
       // typing
       box.addEventListener('input', () => {
-        // keep only one digit
         box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
-
-        // clear state classes first
+        // reset state
         box.classList.remove('correct','incorrect');
+        ring.classList.remove('spinning'); // stop ring once a choice is made
 
         if (box.value) {
-          // mark correct/incorrect for this position
           (box.value === ANSWER[idx]) ? box.classList.add('correct')
                                       : box.classList.add('incorrect');
           // move forward
@@ -99,7 +133,7 @@
         }
       });
 
-      // quick paste of the whole code
+      // paste convenience
       box.addEventListener('paste', (e) => {
         const t = (e.clipboardData || window.clipboardData).getData('text') || '';
         if (!t) return;
@@ -109,6 +143,7 @@
           boxes[i].value = d;
           boxes[i].classList.toggle('correct',  d === ANSWER[i]);
           boxes[i].classList.toggle('incorrect', d !== ANSWER[i]);
+          rings[i].classList.remove('spinning');
         });
         if (digits.length < boxes.length) boxes[digits.length].focus();
         checkAll();
@@ -126,7 +161,6 @@
           document.getElementById('inputs').style.display = 'none';
         } else {
           error.style.display = 'block';
-          // highlight all incorrect boxes
           boxes.forEach((b,i)=>{
             if ((b.value || '') !== ANSWER[i]) {
               b.classList.remove('correct'); b.classList.add('incorrect');
