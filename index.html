@@ -17,10 +17,7 @@
     #inputs { display:flex; gap:.45rem; margin-bottom:1rem; }
 
     /* Wrapper draws the animated rainbow ring. The input sits on top. */
-    .ring {
-      position: relative; display:inline-block;
-      border-radius: calc(var(--radius) + var(--ring));
-    }
+    .ring { position: relative; display:inline-block; border-radius: calc(var(--radius) + var(--ring)); }
 
     /* Stationary input box */
     .codebox {
@@ -35,13 +32,9 @@
       content:""; position:absolute; inset: calc(-1 * var(--ring));
       border-radius: calc(var(--radius) + var(--ring));
       padding: var(--ring); z-index:0; opacity:0; transition: opacity .12s ease;
-
-      /* animated colors using a conic gradient whose angle changes via CSS var */
       --angle: 0deg;
       background: conic-gradient(from var(--angle),
         red, orange, yellow, green, blue, indigo, violet, red);
-
-      /* hollow center so only the border shows */
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -51,26 +44,37 @@
         linear-gradient(#000 0 0);
               mask-composite: exclude;
     }
-
-    /* When focused, show the ring and animate ONLY the colors */
     .ring.spinning::after { opacity:1; animation: spin 1.2s linear infinite; }
 
-    /* Animate the custom property (no element rotation) */
-    @property --angle {
-      syntax: '<angle>';
-      inherits: false;
-      initial-value: 0deg;
-    }
+    @property --angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
     @keyframes spin { to { --angle: 360deg; } }
 
-    /* Correctness styles (stop rainbow and set static color) */
     .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
     .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
 
     #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
     #win   { display:none; color:#28a745; font-size:1.3rem; margin-top:.8rem; }
-    #photo { display:none; max-width:min(700px, 92vw); width:100%; height:auto;
-             margin-top:1rem; border:2px solid #b0c4ff; border-radius:12px; }
+
+    /* Reveal section */
+    #reveal { display:none; width:min(700px, 92vw); margin-top:1rem; }
+    .reveal-header { font-weight:600; margin-bottom:.4rem; color:#2b3a67; }
+
+    .image-wrap { position:relative; width:100%; border:2px solid #b0c4ff; border-radius:12px; overflow:hidden; background:#fff; }
+    #photo { width:100%; height:auto; display:block; }
+
+    /* scratch layer (canvas sits on top) */
+    #scratch {
+      position:absolute; inset:0; touch-action:none; /* prevent page scrolling while scratching */
+      cursor: crosshair;
+    }
+
+    /* fallback button if someone wants to skip scratching */
+    .reveal-controls { margin-top:.6rem; font-size:.95rem; }
+    .btn {
+      display:inline-block; padding:.45rem .75rem; border-radius:8px; border:1px solid #b0c4ff; background:#fff;
+      cursor:pointer; user-select:none;
+    }
+    .btn:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
   </style>
 </head>
 <body>
@@ -88,7 +92,21 @@
 
   <div id="error">Wrong code, try again!</div>
   <div id="win">🎉 Nice job! Continue with the clue below.</div>
-  <img id="photo" src="bench.jpg" alt="Clue image" />
+
+  <!-- Reveal area -->
+  <section id="reveal">
+    <div class="reveal-header">👉 Swipe/erase to reveal the image</div>
+    <div class="image-wrap">
+      <img id="photo" src="bench.jpg" alt="Clue image" />
+      <canvas id="scratch"></canvas>
+    </div>
+    <div class="reveal-controls">
+      <span class="btn" id="revealAll">Reveal all</span>
+    </div>
+  </section>
+
+  <!-- Theme music -->
+  <audio id="theme" src="mission-impossible.mp3" preload="auto"></audio>
 
   <script>
     const ANSWER = "8314335";
@@ -96,22 +114,39 @@
     const boxes  = rings.map(r => r.querySelector('.codebox'));
     const error  = document.getElementById('error');
     const win    = document.getElementById('win');
+    const reveal = document.getElementById('reveal');
     const photo  = document.getElementById('photo');
+    const canvas = document.getElementById('scratch');
+    const revealAllBtn = document.getElementById('revealAll');
+    const theme  = document.getElementById('theme');
 
-    // focus first
+    // ----- THEME: start on first user interaction (safe autoplay) -----
+    let audioStarted = false;
+    function startAudioOnce() {
+      if (audioStarted) return;
+      audioStarted = true;
+      theme.volume = 1.0;
+      theme.play().catch(() => {
+        // If autoplay still blocked, show a quick user prompt
+        console.log('Autoplay blocked; user will need to interact again.');
+      });
+    }
+    // Start audio on common interactions
+    ['click','keydown','touchstart','focus'].forEach(evt => {
+      window.addEventListener(evt, startAudioOnce, { once:false, passive:true });
+    });
+
+    // ----- CODE INPUTS -----
     boxes[0].focus();
-
     boxes.forEach((box, idx) => {
       const ring = rings[idx];
 
-      // show animated colors while focused
       box.addEventListener('focus', () => ring.classList.add('spinning'));
       box.addEventListener('blur',  () => ring.classList.remove('spinning'));
 
-      // typing
       box.addEventListener('input', () => {
+        startAudioOnce(); // user just interacted
         box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
-        // once a digit is chosen, stop the rainbow and set state
         ring.classList.remove('spinning');
         box.classList.remove('correct','incorrect');
 
@@ -123,14 +158,12 @@
         checkAll();
       });
 
-      // backspace to go back when empty
       box.addEventListener('keydown', (e) => {
         if (e.key === 'Backspace' && !box.value && idx > 0) {
           boxes[idx - 1].focus();
         }
       });
 
-      // paste convenience
       box.addEventListener('paste', (e) => {
         const t = (e.clipboardData || window.clipboardData).getData('text') || '';
         if (!t) return;
@@ -154,8 +187,10 @@
       if (attempt.length === ANSWER.length) {
         if (attempt === ANSWER) {
           win.style.display = 'block';
-          photo.style.display = 'block';
           document.getElementById('inputs').style.display = 'none';
+          reveal.style.display = 'block';
+          // initialize scratch overlay now that image is visible
+          requestAnimationFrame(setupScratch);
         } else {
           error.style.display = 'block';
           boxes.forEach((b,i)=>{
@@ -166,6 +201,111 @@
         }
       }
     }
+
+    // ----- SCRATCH-OFF OVERLAY -----
+    let ctx, isDrawing = false, lastX = 0, lastY = 0, clearedRatio = 0;
+    function setupScratch(){
+      // Size canvas to match displayed image size (and handle HiDPI)
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const rect = photo.getBoundingClientRect();
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      canvas.width  = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+
+      ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      // Draw the haze
+      const grad = ctx.createLinearGradient(0,0,rect.width,rect.height);
+      grad.addColorStop(0, 'rgba(160,170,190,0.92)');
+      grad.addColorStop(1, 'rgba(110,120,140,0.92)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0,rect.width,rect.height);
+
+      // Nice “Swipe to reveal” text on the overlay
+      ctx.font = '600 18px Arial';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.textAlign = 'center';
+      ctx.fillText('Swipe to reveal', rect.width/2, 32);
+
+      // Events
+      canvas.addEventListener('pointerdown', onDown, { passive:true });
+      canvas.addEventListener('pointermove', onMove, { passive:true });
+      window.addEventListener('pointerup', onUp, { passive:true });
+    }
+
+    function eraseDot(x, y, radius = 24){
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function onDown(e){
+      isDrawing = true;
+      const pos = getPos(e);
+      lastX = pos.x; lastY = pos.y;
+      eraseDot(pos.x, pos.y);
+      estimateCleared();
+    }
+
+    function onMove(e){
+      if (!isDrawing) return;
+      const pos = getPos(e);
+      drawLine(lastX, lastY, pos.x, pos.y);
+      lastX = pos.x; lastY = pos.y;
+      estimateCleared();
+    }
+
+    function onUp(){
+      isDrawing = false;
+    }
+
+    function drawLine(x1, y1, x2, y2){
+      const dx = x2 - x1, dy = y2 - y1;
+      const dist = Math.hypot(dx, dy);
+      const steps = Math.max(1, Math.floor(dist / 10));
+      for (let i=0; i<=steps; i++){
+        const x = x1 + (dx * i/steps);
+        const y = y1 + (dy * i/steps);
+        eraseDot(x,y);
+      }
+    }
+
+    function getPos(e){
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
+      const y = (e.clientY ?? (e.touches && e.touches[0].clientY)) - rect.top;
+      return { x, y };
+    }
+
+    function estimateCleared(){
+      // Sample pixels to estimate how much overlay is gone
+      // (lightweight: sample a grid rather than full image)
+      const sampleStep = 16;
+      const w = canvas.width, h = canvas.height;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const imgData = ctx.getImageData(0, 0, Math.min(w, 1024), Math.min(h, 1024)).data;
+      // Count transparent pixels (alpha===0)
+      let clear = 0, total = 0;
+      for (let i = 3; i < imgData.length; i += 4*sampleStep) {
+        total++;
+        if (imgData[i] === 0) clear++;
+      }
+      clearedRatio = clear / total;
+      if (clearedRatio > 0.4) fadeOutScratch();
+    }
+
+    function fadeOutScratch(){
+      canvas.style.transition = 'opacity .35s ease';
+      canvas.style.opacity = '0';
+      setTimeout(()=>{ canvas.style.display = 'none'; }, 400);
+    }
+
+    // “Reveal all” button
+    revealAllBtn.addEventListener('click', fadeOutScratch);
   </script>
 </body>
 </html>
