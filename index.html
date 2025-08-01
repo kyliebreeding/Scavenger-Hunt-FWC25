@@ -5,74 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
   <title>Scavenger Hunt – Code Entry</title>
   <style>
-    :root { --ring: 3px; --radius: 10px; }
+/* Responsive sizing for code boxes */
+:root{
+  --box-size: clamp(2.0rem, 9.2vw, 2.6rem);   /* width/height scales with screen */
+  --box-font: clamp(16px, 4.2vw, 20px);       /* keep >=16px to avoid iOS zoom */
+  --gap:      clamp(0.20rem, 1.5vw, 0.45rem); /* spacing between boxes */
+  --ring:     clamp(2px, 0.6vw, 3px);         /* rainbow ring thickness */
+  --radius:   10px;
+}
 
-    html, body { height:100%; margin:0; }
-    body {
-      display:flex; align-items:center; justify-content:center; flex-direction:column;
-      font-family: Arial, sans-serif; background:#eef4ff; padding:1.5rem; text-align:center;
-    }
+#inputs { 
+  display:flex; 
+  gap: var(--gap);
+  margin-bottom: 1rem; 
+}
 
-    h1 { margin:.2rem 0 1rem; font-size:1.6rem; }
-    #inputs { display:flex; gap:.45rem; margin-bottom:1rem; }
+/* The input box itself */
+.codebox{
+  width: var(--box-size);
+  height: calc(var(--box-size) + 0.3rem);
+  font-size: var(--box-font);
+  border-radius: var(--radius);
+}
 
-    /* Wrapper draws the animated rainbow ring. The input sits on top. */
-    .ring { position: relative; display:inline-block; border-radius: calc(var(--radius) + var(--ring)); }
+/* Make the wrapper ring track the box size too */
+.ring{ border-radius: calc(var(--radius) + var(--ring)); }
+.ring::after{
+  inset: calc(-1 * var(--ring));
+  border-radius: calc(var(--radius) + var(--ring));
+  padding: var(--ring);
+}
 
-    /* Stationary input box */
-    .codebox {
-      width:2.6rem; height:2.9rem; font-size:20px; text-align:center;
-      border:2px solid #b0c4ff; border-radius: var(--radius);
-      background:#fff; outline:none; position:relative; z-index:1;
-      transition:border-color .18s ease, box-shadow .18s ease;
-    }
+/* Extra squeeze for very narrow phones */
+@media (max-width: 360px){
+  :root{
+    --box-size: clamp(1.8rem, 9vw, 2.2rem);
+    --box-font: clamp(16px, 3.8vw, 18px);
+    --gap:      clamp(0.15rem, 1.2vw, 0.35rem);
+  }
+}
 
-    /* Rainbow border (stationary shape, moving colors only) */
-    .ring::after{
-      content:""; position:absolute; inset: calc(-1 * var(--ring));
-      border-radius: calc(var(--radius) + var(--ring));
-      padding: var(--ring); z-index:0; opacity:0; transition: opacity .12s ease;
-      --angle: 0deg;
-      background: conic-gradient(from var(--angle),
-        red, orange, yellow, green, blue, indigo, violet, red);
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-              mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-              mask-composite: exclude;
-    }
-    .ring.spinning::after { opacity:1; animation: spin 1.2s linear infinite; }
-
-    @property --angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-    @keyframes spin { to { --angle: 360deg; } }
-
-    .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
-    .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
-
-    #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
-
-    /* Reveal section */
-    #reveal { display:none; width:min(700px, 92vw); margin-top:1rem; }
-    .reveal-header { font-weight:600; margin-bottom:.6rem; color:#2b3a67; font-size:1.05rem; }
-
-    .image-wrap { position:relative; width:100%; border:2px solid #b0c4ff; border-radius:12px; overflow:hidden; background:#fff; }
-    #photo { width:100%; height:auto; display:block; }
-
-    /* scratch layer (canvas sits on top) */
-    #scratch {
-      position:absolute; inset:0; touch-action:none; /* prevent page scrolling while scratching */
-      cursor: crosshair;
-    }
-
-    .reveal-controls { margin-top:.6rem; font-size:.95rem; display:none; } /* hide helper button by default */
-    .btn {
-      display:inline-block; padding:.45rem .75rem; border-radius:8px; border:1px solid #b0c4ff; background:#fff;
-      cursor:pointer; user-select:none;
-    }
-    .btn:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+/* Safety net for ultra-narrow screens (keeps one line) */
+@media (max-width: 320px){
+  #inputs{
+    transform: scale(0.92);
+    transform-origin: top center;
+  }
+}
   </style>
 </head>
 <body>
