@@ -14,17 +14,15 @@
     }
 
     h1 { margin:.2rem 0 1rem; font-size:1.6rem; }
-
     #inputs { display:flex; gap:.45rem; margin-bottom:1rem; }
 
-    /* wrapper that carries the spinning rainbow ring */
+    /* Wrapper draws the animated rainbow ring. The input sits on top. */
     .ring {
-      position: relative;
-      display: inline-block;
-      border-radius: var(--radius);
+      position: relative; display:inline-block;
+      border-radius: calc(var(--radius) + var(--ring));
     }
 
-    /* the input itself (stays stationary) */
+    /* Stationary input box */
     .codebox {
       width:2.6rem; height:2.9rem; font-size:20px; text-align:center;
       border:2px solid #b0c4ff; border-radius: var(--radius);
@@ -32,18 +30,18 @@
       transition:border-color .18s ease, box-shadow .18s ease;
     }
 
-    /* spinning rainbow border drawn by a pseudo-element around the input */
+    /* Rainbow border (stationary shape, moving colors only) */
     .ring::after{
-      content:"";
-      position:absolute;
-      inset: calc(-1 * var(--ring));
+      content:""; position:absolute; inset: calc(-1 * var(--ring));
       border-radius: calc(var(--radius) + var(--ring));
-      background: conic-gradient(
-        red, orange, yellow, green, blue, indigo, violet, red
-      );
-      /* create a hollow ring (only the border shows) */
-      padding: var(--ring);
-      /* mask trick to punch the center out */
+      padding: var(--ring); z-index:0; opacity:0; transition: opacity .12s ease;
+
+      /* animated colors using a conic gradient whose angle changes via CSS var */
+      --angle: 0deg;
+      background: conic-gradient(from var(--angle),
+        red, orange, yellow, green, blue, indigo, violet, red);
+
+      /* hollow center so only the border shows */
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
@@ -52,21 +50,20 @@
         linear-gradient(#000 0 0) content-box,
         linear-gradient(#000 0 0);
               mask-composite: exclude;
-
-      z-index:0;
-      opacity:0;               /* hidden by default */
-      transform: rotate(0deg);
-      transition: opacity .12s ease;
     }
 
-    /* when focused, show and spin the ring (input itself does NOT rotate) */
-    .ring.spinning::after{
-      opacity:1;
-      animation: spin 1.2s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(1turn); } }
+    /* When focused, show the ring and animate ONLY the colors */
+    .ring.spinning::after { opacity:1; animation: spin 1.2s linear infinite; }
 
-    /* correctness colors override the normal border and stop the ring */
+    /* Animate the custom property (no element rotation) */
+    @property --angle {
+      syntax: '<angle>';
+      inherits: false;
+      initial-value: 0deg;
+    }
+    @keyframes spin { to { --angle: 360deg; } }
+
+    /* Correctness styles (stop rainbow and set static color) */
     .codebox.correct  { border-color:#28a745 !important; box-shadow:0 0 0 3px rgba(40,167,69,.15); }
     .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
 
@@ -101,26 +98,26 @@
     const win    = document.getElementById('win');
     const photo  = document.getElementById('photo');
 
+    // focus first
     boxes[0].focus();
 
     boxes.forEach((box, idx) => {
       const ring = rings[idx];
 
-      // show spinner on focus, hide on blur
+      // show animated colors while focused
       box.addEventListener('focus', () => ring.classList.add('spinning'));
       box.addEventListener('blur',  () => ring.classList.remove('spinning'));
 
       // typing
       box.addEventListener('input', () => {
         box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
-        // reset state
+        // once a digit is chosen, stop the rainbow and set state
+        ring.classList.remove('spinning');
         box.classList.remove('correct','incorrect');
-        ring.classList.remove('spinning'); // stop ring once a choice is made
 
         if (box.value) {
           (box.value === ANSWER[idx]) ? box.classList.add('correct')
                                       : box.classList.add('incorrect');
-          // move forward
           if (idx < boxes.length - 1) boxes[idx + 1].focus();
         }
         checkAll();
