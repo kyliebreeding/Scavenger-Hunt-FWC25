@@ -53,11 +53,10 @@
     .codebox.incorrect{ border-color:#d9534f !important; box-shadow:0 0 0 3px rgba(217,83,79,.15); }
 
     #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
-    #win   { display:none; color:#28a745; font-size:1.3rem; margin-top:.8rem; }
 
     /* Reveal section */
     #reveal { display:none; width:min(700px, 92vw); margin-top:1rem; }
-    .reveal-header { font-weight:600; margin-bottom:.4rem; color:#2b3a67; }
+    .reveal-header { font-weight:600; margin-bottom:.6rem; color:#2b3a67; font-size:1.05rem; }
 
     .image-wrap { position:relative; width:100%; border:2px solid #b0c4ff; border-radius:12px; overflow:hidden; background:#fff; }
     #photo { width:100%; height:auto; display:block; }
@@ -68,8 +67,7 @@
       cursor: crosshair;
     }
 
-    /* fallback button if someone wants to skip scratching */
-    .reveal-controls { margin-top:.6rem; font-size:.95rem; }
+    .reveal-controls { margin-top:.6rem; font-size:.95rem; display:none; } /* hide helper button by default */
     .btn {
       display:inline-block; padding:.45rem .75rem; border-radius:8px; border:1px solid #b0c4ff; background:#fff;
       cursor:pointer; user-select:none;
@@ -91,11 +89,10 @@
   </div>
 
   <div id="error">Wrong code, try again!</div>
-  <div id="win">🎉 Nice job! Continue with the clue below.</div>
 
   <!-- Reveal area -->
   <section id="reveal">
-    <div class="reveal-header">👉 Swipe/erase to reveal the image</div>
+    <div class="reveal-header">Swipe/erase to reveal your next clue</div>
     <div class="image-wrap">
       <img id="photo" src="bench.jpg" alt="Clue image" />
       <canvas id="scratch"></canvas>
@@ -110,10 +107,11 @@
 
   <script>
     const ANSWER = "8314335";
+    const CLEAR_THRESHOLD = 0.5; // >50% must be cleared
+
     const rings  = Array.from(document.querySelectorAll('.ring'));
     const boxes  = rings.map(r => r.querySelector('.codebox'));
     const error  = document.getElementById('error');
-    const win    = document.getElementById('win');
     const reveal = document.getElementById('reveal');
     const photo  = document.getElementById('photo');
     const canvas = document.getElementById('scratch');
@@ -126,12 +124,8 @@
       if (audioStarted) return;
       audioStarted = true;
       theme.volume = 1.0;
-      theme.play().catch(() => {
-        // If autoplay still blocked, show a quick user prompt
-        console.log('Autoplay blocked; user will need to interact again.');
-      });
+      theme.play().catch(()=>{});
     }
-    // Start audio on common interactions
     ['click','keydown','touchstart','focus'].forEach(evt => {
       window.addEventListener(evt, startAudioOnce, { once:false, passive:true });
     });
@@ -145,7 +139,7 @@
       box.addEventListener('blur',  () => ring.classList.remove('spinning'));
 
       box.addEventListener('input', () => {
-        startAudioOnce(); // user just interacted
+        startAudioOnce();
         box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
         ring.classList.remove('spinning');
         box.classList.remove('correct','incorrect');
@@ -159,9 +153,7 @@
       });
 
       box.addEventListener('keydown', (e) => {
-        if (e.key === 'Backspace' && !box.value && idx > 0) {
-          boxes[idx - 1].focus();
-        }
+        if (e.key === 'Backspace' && !box.value && idx > 0) boxes[idx - 1].focus();
       });
 
       box.addEventListener('paste', (e) => {
@@ -186,10 +178,8 @@
 
       if (attempt.length === ANSWER.length) {
         if (attempt === ANSWER) {
-          win.style.display = 'block';
           document.getElementById('inputs').style.display = 'none';
           reveal.style.display = 'block';
-          // initialize scratch overlay now that image is visible
           requestAnimationFrame(setupScratch);
         } else {
           error.style.display = 'block';
@@ -216,18 +206,15 @@
       ctx = canvas.getContext('2d');
       ctx.scale(dpr, dpr);
 
-      // Draw the haze
-      const grad = ctx.createLinearGradient(0,0,rect.width,rect.height);
-      grad.addColorStop(0, 'rgba(160,170,190,0.92)');
-      grad.addColorStop(1, 'rgba(110,120,140,0.92)');
-      ctx.fillStyle = grad;
+      // Draw an OPAQUE haze (no transparency)
+      ctx.fillStyle = '#6e788f'; // solid slate color
       ctx.fillRect(0,0,rect.width,rect.height);
 
-      // Nice “Swipe to reveal” text on the overlay
+      // Instruction text on the overlay
       ctx.font = '600 18px Arial';
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
-      ctx.fillText('Swipe to reveal', rect.width/2, 32);
+      ctx.fillText('Swipe/erase to reveal your next clue', rect.width/2, 32);
 
       // Events
       canvas.addEventListener('pointerdown', onDown, { passive:true });
@@ -259,9 +246,7 @@
       estimateCleared();
     }
 
-    function onUp(){
-      isDrawing = false;
-    }
+    function onUp(){ isDrawing = false; }
 
     function drawLine(x1, y1, x2, y2){
       const dx = x2 - x1, dy = y2 - y1;
@@ -276,26 +261,28 @@
 
     function getPos(e){
       const rect = canvas.getBoundingClientRect();
-      const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
-      const y = (e.clientY ?? (e.touches && e.touches[0].clientY)) - rect.top;
-      return { x, y };
+      const clientX = e.clientX ?? (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY ?? (e.touches && e.touches[0].clientY);
+      return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
     function estimateCleared(){
-      // Sample pixels to estimate how much overlay is gone
-      // (lightweight: sample a grid rather than full image)
-      const sampleStep = 16;
+      // Sample a subset of pixels to estimate cleared area (alpha==0 => cleared)
       const w = canvas.width, h = canvas.height;
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const imgData = ctx.getImageData(0, 0, Math.min(w, 1024), Math.min(h, 1024)).data;
-      // Count transparent pixels (alpha===0)
+      const sampleW = Math.min(w, 1024), sampleH = Math.min(h, 1024);
+      const imgData = ctx.getImageData(0, 0, sampleW, sampleH).data;
+
       let clear = 0, total = 0;
-      for (let i = 3; i < imgData.length; i += 4*sampleStep) {
-        total++;
-        if (imgData[i] === 0) clear++;
+      const step = 8; // sampling step (bigger = faster, rougher)
+      for (let y = 3; y < sampleH*4; y += 4*step) {
+        for (let x = 3; x < sampleW*4; x += 4*step) {
+          total++;
+          if (imgData[y*sampleW*4 + x] === 0) clear++; // alpha channel
+        }
       }
       clearedRatio = clear / total;
-      if (clearedRatio > 0.4) fadeOutScratch();
+
+      if (clearedRatio > CLEAR_THRESHOLD) fadeOutScratch();
     }
 
     function fadeOutScratch(){
@@ -304,8 +291,8 @@
       setTimeout(()=>{ canvas.style.display = 'none'; }, 400);
     }
 
-    // “Reveal all” button
-    revealAllBtn.addEventListener('click', fadeOutScratch);
+    // Optional helper (kept but hidden). Remove if you don’t want a bypass.
+    revealAllBtn?.addEventListener('click', fadeOutScratch);
   </script>
 </body>
 </html>
