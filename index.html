@@ -2,27 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scavenger Hunt – FWC25</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <title>Scavenger Hunt – Code Entry</title>
   <style>
-    html, body {
-      width:100%; height:100%; margin:0; padding:0; box-sizing:border-box;
-    }
+    :root { --gap: .4rem; }
+
+    html, body { height:100%; margin:0; }
     body {
-      display:flex; flex-direction:column; justify-content:center; align-items:center;
-      background:#eef4ff;
-      font-family:Arial, sans-serif; text-align:center;
-    }
-    h1 {
-      font-size: 1.8rem; margin-bottom: 0.8rem;
-    }
-    #inputs {
-      display:flex; gap:0.3rem; margin-bottom:1.4rem; justify-content:center;
-    }
-    input {
-      width:2.5rem; height:2.5rem;
-      font-size:20px;
+      display:flex; align-items:center; justify-content:center; flex-direction:column;
+      font-family: Arial, sans-serif; background:#eef4ff; padding:1.5rem;
       text-align:center;
-      border:2px solid #b0c4ff;
-      border-radius:
+    }
+
+    h1 { margin:.2rem 0 1rem; font-size:1.6rem; }
+
+    #inputs { display:flex; gap:var(--gap); margin-bottom:1rem; }
+    .codebox {
+      width:2.6rem; height:2.9rem; font-size:20px; text-align:center;
+      border:2px solid #b0c4ff; border-radius:10px; background:#fff;
+      outline:none;
+      transition:border-color .18s ease, box-shadow .18s ease;
+    }
+
+    /* Focused: animated rainbow ring */
+    .codebox:focus {
+      border-color: transparent;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        conic-gradient(from 0deg, red, orange, yellow, green, blue, indigo, violet, red) border-box;
+      animation: spin 1.2s linear infinite;
+      box-shadow: 0 0 0 3px rgba(125,156,255,.18);
+    }
+    @keyframes spin { to { transform: rotate(1turn); } }
+
+    /* After typing, we set these classes in JS */
+    .correct  { border:2px solid #28a745 !important; background:#fff !important; animation:none !important; }
+    .incorrect{ border:2px solid #d9534f !important; background:#fff !important; animation:none !important; }
+
+    #error { display:none; color:#d9534f; font-weight:bold; margin-top:.6rem; }
+
+    #win   { display:none; color:#28a745; font-size:1.3rem; margin-top:.8rem; }
+    #photo { display:none; max-width:min(700px, 92vw); width:100%; height:auto;
+             margin-top:1rem; border:2px solid #b0c4ff; border-radius:12px; }
+  </style>
+</head>
+<body>
+  <h1>Enter the 7-Digit Code</h1>
+
+  <div id="inputs" aria-label="7 digit code input">
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+    <input class="codebox" inputmode="numeric" pattern="[0-9]*" maxlength="1" />
+  </div>
+
+  <div id="error">Wrong code, try again!</div>
+  <div id="win">🎉 Nice job! Continue with the clue below.</div>
+  <img id="photo" src="bench.jpg" alt="Clue image" />
+
+  <script>
+    const ANSWER = "8314335";
+    const boxes  = Array.from(document.querySelectorAll('.codebox'));
+    const error  = document.getElementById('error');
+    const win    = document.getElementById('win');
+    const photo  = document.getElementById('photo');
+
+    // focus first box on load
+    boxes[0].focus();
+
+    boxes.forEach((box, idx) => {
+      // typing
+      box.addEventListener('input', () => {
+        // keep only one digit
+        box.value = (box.value || '').replace(/\D/g,'').slice(0,1);
+
+        // clear state classes first
+        box.classList.remove('correct','incorrect');
+
+        if (box.value) {
+          // mark correct/incorrect for this position
+          (box.value === ANSWER[idx]) ? box.classList.add('correct')
+                                      : box.classList.add('incorrect');
+          // move forward
+          if (idx < boxes.length - 1) boxes[idx + 1].focus();
+        }
+        checkAll();
+      });
+
+      // backspace to go back when empty
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && idx > 0) {
+          boxes[idx - 1].focus();
+        }
+      });
+
+      // quick paste of the whole code
+      box.addEventListener('paste', (e) => {
+        const t = (e.clipboardData || window.clipboardData).getData('text') || '';
+        if (!t) return;
+        e.preventDefault();
+        const digits = t.replace(/\D/g,'').slice(0, boxes.length).split('');
+        digits.forEach((d, i) => {
+          boxes[i].value = d;
+          boxes[i].classList.toggle('correct',  d === ANSWER[i]);
+          boxes[i].classList.toggle('incorrect', d !== ANSWER[i]);
+        });
+        if (digits.length < boxes.length) boxes[digits.length].focus();
+        checkAll();
+      });
+    });
+
+    function checkAll(){
+      const attempt = boxes.map(b => b.value || '').join('');
+      error.style.display = 'none';
+
+      if (attempt.length === ANSWER.length) {
+        if (attempt === ANSWER) {
+          win.style.display = 'block';
+          photo.style.display = 'block';
+          document.getElementById('inputs').style.display = 'none';
+        } else {
+          error.style.display = 'block';
+          // highlight all incorrect boxes
+          boxes.forEach((b,i)=>{
+            if ((b.value || '') !== ANSWER[i]) {
+              b.classList.remove('correct'); b.classList.add('incorrect');
+            }
+          });
+        }
+      }
+    }
+  </script>
+</body>
+</html>
